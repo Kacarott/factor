@@ -149,3 +149,8 @@ tools.test ;
 { 1 } [ 11 13 stein ] unit-test
 { 2 } [ 14 52 stein ] unit-test
 { 7 } [ 14 7 stein ] unit-test
+
+{ 1539825 } [ 14 5 faulhaber ] unit-test
+{ 11 } [ 11 0 faulhaber ] unit-test
+{ 0 } [ 0 7 faulhaber ] unit-test
+{ 0 } [ 0 0 faulhaber ] unit-test

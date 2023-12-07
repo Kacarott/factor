@@ -411,3 +411,11 @@ M:: vose random* ( obj rnd -- elt )
     dup obj probs>> nth-unsafe { float } declare rnd (random-unit) >=
     [ obj alias>> nth-unsafe { fixnum } declare ] unless
     obj items>> nth-unsafe ;
+
+: faulhaber ( n p -- r )
+    1 + [ dup [0..b) [ {
+        [ odd? -1 1 ? 2nip ]
+        [ nCk nip ]
+        [ bernoulli 2nip ]
+        [ - ^ ]
+    } 3cleave * * * ] 2with map-sum ] keep / ;

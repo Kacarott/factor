@@ -103,3 +103,7 @@ HELP: round-to-decimal
 HELP: kahan-sum
 { $values { "seq" sequence } { "n" float } }
 { $description "Calculates the summation of the sequence using the Kahan summation algorithm." } ;
+
+HELP: faulhaber
+{ $values { "n" integer } { "p" rational } }
+{ $description "Calculates the sum of the  " { $snippet "p" } "-th powers of the first " { $snippet "n" } " positive integers." } ;
