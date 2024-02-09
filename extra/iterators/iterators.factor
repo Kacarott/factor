@@ -1,4 +1,4 @@
-USING: kernel math ;
+USING: kernel sequences math lists accessors make ;
 IN: iterators
 
 ! Modelled after Rusts iterator trait
@@ -28,14 +28,14 @@ M: iterator >iter ;
 GENERIC: next* ( itr -- value/f ? )
 
 ! Optional Generics
-GENERIC: length ( itr -- n )
+! GENERIC: length ( itr -- n )
 M: iterator length -1 [ 1 + over next* nip ] loop nip ;
 
 GENERIC: size-hint ( itr -- min max/f )
 M: iterator size-hint drop 0 f ;
 
 GENERIC: last ( itr -- elt/f )
-M: iterator last f f [ nip over next* ] drop nip ;
+M: iterator last f f [ nip over next* ] loop drop nip ;
 
 GENERIC: nth* ( n itr -- elt/f ? )
 M: iterator nth* dup next* roll [ 2drop dup next* ] times nipd ;
@@ -44,30 +44,41 @@ GENERIC#: iter-map 1 ( itr quot: ( elt -- newelt ) -- itr' )
 GENERIC#: iter-filter 1 ( itr quot: ( elt -- ? ) -- itr' )
 
 ! Intances
-TUPLE: iter-map itr op ;
-INSTANCE: iter-map iterator
-M: iter-map next*
-    [ itr>> next* ] [ op>> ] bi over '[ [ _ call( elt -- newelt ) ] dip ] when ;
-M: iter-map size-hint itr>> size-hint ;
-M: iterator iter-map \ iter-map boa ;
+TUPLE: map-iter itr op ;
+INSTANCE: map-iter iterator
+M: map-iter next*
+    [ itr>> next* ] [ op>> ] bi over
+    [ [ call( elt -- newelt ) ] curry dip ] [ drop ] if ;
+M: map-iter size-hint itr>> size-hint ;
+M: iterator iter-map \ map-iter boa ;
 
-TUPLE: iter-filter itr pred ;
-INSTANCE: iter-filter iterator
-M: iter-filter next*
+TUPLE: filter-iter itr pred ;
+INSTANCE: filter-iter iterator
+M: filter-iter next*
     [ itr>> ] [ pred>> f f rot ] bi
     '[ 2drop dup next* dup [ over _ call( elt -- ? ) not ] [ f ] if ] loop nipd ;
-M: iter-filter size-hint itr>> size-hint [ drop 0 ] dip ;
-M: iterator iter-filter \ iter-filter boa ;
+M: filter-iter size-hint itr>> size-hint [ drop 0 ] dip ;
+M: iterator iter-filter \ filter-iter boa ;
 
 INSTANCE: sequence-iter iterator
 M: sequence-iter next*
     dup [ ind>> ] [ seq>> length ] bi <
-    [ [ ind>> ] [ seq>> nth ] [ [ 1 + ] change-ind drop t ] ]
+    [ [ ind>> ] [ seq>> nth ] [ [ 1 + ] change-ind drop t ] tri ]
     [ drop f f ] if ;
-M: sequence-iter length [ seq>> length ] [ ind>> ] - dup ;
-M: sequence-iter size-hint length dup ;
+M: sequence-iter length
+    dup [ seq>> length ] [ ind>> ] bi - tuck [ + ] curry change-ind drop ;
+M: sequence-iter size-hint [ seq>> length ] [ ind>> ] bi - dup ;
 M: sequence-iter last
-    dup length 0 = [ drop f ] [ seq>> [ length 1 - ] keep nth ] if ;
+    dup size-hint nip 0 = [ drop f ] [
+        [ seq>> [ length 1 - ] keep nth ] [ length drop ] bi
+    ] if ;
+M: sequence-iter nth*
+    dup size-hint nip pick < [
+        swap [ + ] curry change-ind next*
+    ] [ length 2drop f f ] if ;
+
+INSTANCE: list-iter iterator
+M: list-iter next* dup list>> dup nil? [ 2drop f f ] [ uncons rot list<< t ] if ;
 
 ! Classes which support collecting from iterables
 
@@ -76,15 +87,24 @@ MIXIN: iterator>
 ! Required Generics
 GENERIC: collect-as ( itr exemplar -- collection )
 
+! Instances
+INSTANCE: sequence iterator>
+M: sequence collect-as [ dup sequence-iter? [ seq>> ] [
+        '[ [ _ next* ] [ , ] while drop ] V{ } make
+    ] if ] dip like ;
+
 ! Eager operations
 : map ( ... >itr quot: ( ... elt -- ... newelt ) -- ... itr> )
-: filter ( ... >itr quot: ( ... elt -- ... ? ) -- ... itr> )
-
-! Mutating operations
-: map! ( ... >itr quot: ( ... elt -- ... newelt ) -- ... )
-
-! Stretching operations
-: filter! ( ... >itr quot: ( ... elt -- ... ? ) -- ... )
+    over [
+        [ >iter ] dip '[ [ _ next* ] [ @ , ] while drop ] V{ } make >iter
+    ] dip collect-as ; inline
+! : filter ( ... >itr quot: ( ... elt -- ... ? ) -- ... itr> )
+!
+! ! Mutating operations
+! : map! ( ... >itr quot: ( ... elt -- ... newelt ) -- ... )
+!
+! ! Stretching operations
+! : filter! ( ... >itr quot: ( ... elt -- ... ? ) -- ... )
 
 
 

@@ -9,7 +9,7 @@ ARTICLE: "iterators" "Iterators"
 All iterators must be instances of the mixin class:"
 { $subsections iterator iterator? }
 "All iterators must be able to emit values, advancing the iterator:"
-{ $subsections next }
+! { $subsections next }
 ;
 
 ABOUT: "iterators"
