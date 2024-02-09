@@ -1,10 +1,11 @@
-USING: kernel sequences math lists accessors make ;
+USING: kernel sequences math lists dlists accessors make combinators ;
 IN: iterators
 
-! Modelled after Rusts iterator trait
+! Modelled loosely after Rusts iterator trait
 ! https://doc.rust-lang.org/std/iter/trait.Iterator.html
 
 ! Classes which support iteration
+! ===============================
 MIXIN: >iterator
 
 ! Required Generics
@@ -12,20 +13,29 @@ GENERIC: >iter ( >itr -- itr )
 
 ! Instances
 INSTANCE: sequence >iterator
-TUPLE: sequence-iter seq ind ;
-M: sequence >iter 0 \ sequence-iter boa ;
+TUPLE: sequence-iter seq read write ;
+M: sequence >iter 0 0 \ sequence-iter boa ;
 
 INSTANCE: list >iterator
 TUPLE: list-iter list ;
 M: list >iter \ list-iter boa ;
 
+INSTANCE: dlist >iterator
+TUPLE: dlist-iter list read write ;
+M: dlist >iter dup front>> dup \ dlist-iter boa ;
+
 ! Core iterator class
+! ===================
 MIXIN: iterator
 INSTANCE: iterator >iterator
 M: iterator >iter ;
 
 ! Required Generics
 GENERIC: next* ( itr -- value/f ? )
+
+! Mutable iterables should also implement the following, for words like map! and filter! to work
+! send* is an alternative version of next* which allows feedback into the iterator while progressing
+GENERIC: send* ( elt itr -- value/f ? )
 
 ! Optional Generics
 ! GENERIC: length ( itr -- n )
@@ -62,26 +72,45 @@ M: iterator iter-filter \ filter-iter boa ;
 
 INSTANCE: sequence-iter iterator
 M: sequence-iter next*
-    dup [ ind>> ] [ seq>> length ] bi <
-    [ [ ind>> ] [ seq>> nth ] [ [ 1 + ] change-ind drop t ] tri ]
+    dup [ read>> ] [ seq>> length ] bi <
+    [ [ read>> ] [ seq>> nth ] [ [ 1 + ] change-read drop t ] tri ]
     [ drop f f ] if ;
+M: sequence-iter send* {
+        [ write>> ]
+        [ seq>> set-nth ]
+        [ [ 1 + ] change-write next* ]
+        [ over [ drop ] [
+            dup [ write>> ] [ read>> ] bi = [ drop ] [
+                [ write>> ] [ seq>> ] bi set-length
+            ] if
+        ] if ]
+    } cleave ;
 M: sequence-iter length
-    dup [ seq>> length ] [ ind>> ] bi - tuck [ + ] curry change-ind drop ;
-M: sequence-iter size-hint [ seq>> length ] [ ind>> ] bi - dup ;
+    dup [ seq>> length ] [ read>> ] bi - tuck [ + ] curry change-read drop ;
+M: sequence-iter size-hint [ seq>> length ] [ read>> ] bi - dup ;
 M: sequence-iter last
     dup size-hint nip 0 = [ drop f ] [
         [ seq>> [ length 1 - ] keep nth ] [ length drop ] bi
     ] if ;
 M: sequence-iter nth*
     dup size-hint nip pick < [
-        swap [ + ] curry change-ind next*
+        swap [ + ] curry change-read next*
     ] [ length 2drop f f ] if ;
+
 
 INSTANCE: list-iter iterator
 M: list-iter next* dup list>> dup nil? [ 2drop f f ] [ uncons rot list<< t ] if ;
 
-! Classes which support collecting from iterables
+INSTANCE: dlist-iter iterator
+M: dlist-iter next* dup read>> [ [ obj>> ] [ next>> ] bi rot read<< t ] [ drop f f ] if* ;
+M: dlist-iter send*
+    tuck write>> obj<< [ next>> ] change-write [ next* ] keep B over [ drop ] [
+        [ write>> prev>> f >>next ] [ list>> back<< ] bi
+    ] if ;
 
+
+! Classes which support collecting from iterables
+! ===============================================
 MIXIN: iterator>
 
 ! Required Generics
@@ -98,14 +127,20 @@ M: sequence collect-as [ dup sequence-iter? [ seq>> ] [
     over [
         [ >iter ] dip '[ [ _ next* ] [ @ , ] while drop ] V{ } make >iter
     ] dip collect-as ; inline
-! : filter ( ... >itr quot: ( ... elt -- ... ? ) -- ... itr> )
-!
-! ! Mutating operations
-! : map! ( ... >itr quot: ( ... elt -- ... newelt ) -- ... )
-!
-! ! Stretching operations
-! : filter! ( ... >itr quot: ( ... elt -- ... ? ) -- ... )
 
+: filter ( ... >itr quot: ( ... elt -- ... ? ) -- ... itr> )
+    over [
+        [ >iter ] dip '[ [ _ next* ] [ dup @ [ , ] [ drop ] if ] while drop ]
+        V{ } make >iter
+    ] dip collect-as ; inline
+
+! Mutating operations
+: map! ( ... >itr quot: ( ... elt -- ... newelt ) -- ... )
+    [ >iter dup next* ] dip '[ [ @ over send* ] loop ] when 2drop ; inline
+
+! Stretching operations
+: filter! ( ... >itr quot: ( ... elt -- ... ? ) -- ... )
+    [ >iter dup next* ] dip '[ [ dup @ [ over send* ] [ drop dup next* ] if ] loop ] when 2drop ; inline
 
 
 
